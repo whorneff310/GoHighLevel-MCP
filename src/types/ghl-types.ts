@@ -440,6 +440,7 @@ export interface MCPUpdateContactParams {
   email?: string;
   phone?: string;
   tags?: string[];
+  customFields?: GHLCustomField[];
 }
 
 export interface MCPAddContactTagsParams {

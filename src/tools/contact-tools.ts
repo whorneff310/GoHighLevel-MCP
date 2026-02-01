@@ -109,7 +109,7 @@ export class ContactTools {
       },
       {
         name: 'update_contact',
-        description: 'Update contact information',
+        description: 'Update contact information including custom fields',
         inputSchema: {
           type: 'object',
           properties: {
@@ -118,7 +118,19 @@ export class ContactTools {
             lastName: { type: 'string', description: 'Contact last name' },
             email: { type: 'string', description: 'Contact email address' },
             phone: { type: 'string', description: 'Contact phone number' },
-            tags: { type: 'array', items: { type: 'string' }, description: 'Tags to assign to contact' }
+            tags: { type: 'array', items: { type: 'string' }, description: 'Tags to assign to contact' },
+            customFields: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string', description: 'Custom field ID' },
+                  key: { type: 'string', description: 'Custom field key (alternative to id)' },
+                  field_value: { description: 'Value to set (string, array, or object)' }
+                }
+              },
+              description: 'Custom fields to update. Each item needs id or key, plus field_value.'
+            }
           },
           required: ['contactId']
         }
@@ -629,7 +641,8 @@ export class ContactTools {
       lastName: params.lastName,
       email: params.email,
       phone: params.phone,
-      tags: params.tags
+      tags: params.tags,
+      customFields: params.customFields
     });
 
     if (!response.success) {

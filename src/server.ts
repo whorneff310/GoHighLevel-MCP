@@ -12,6 +12,7 @@ import {
   McpError 
 } from '@modelcontextprotocol/sdk/types.js';
 import * as dotenv from 'dotenv';
+import * as path from 'path';
 
 import { GHLApiClient } from './clients/ghl-api-client';
 import { ContactTools } from './tools/contact-tools.js';
@@ -35,8 +36,8 @@ import { ProductsTools } from './tools/products-tools.js';
 import { PaymentsTools } from './tools/payments-tools.js';
 import { InvoicesTools } from './tools/invoices-tools.js';
 
-// Load environment variables
-dotenv.config();
+// Load environment variables from TG-Agent root
+dotenv.config({ path: path.join(__dirname, '../..', '.env') });
 
 /**
  * Main MCP Server class
