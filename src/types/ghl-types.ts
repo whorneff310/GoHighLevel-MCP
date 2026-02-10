@@ -2298,6 +2298,11 @@ export interface MCPDownloadTranscriptionParams {
   messageId: string;
 }
 
+export interface MCPTranscribeVoicemailParams {
+  messageId: string;
+  locationId?: string;
+}
+
 export interface MCPCancelScheduledMessageParams {
   messageId: string;
 }

@@ -342,7 +342,7 @@ class GHLMCPServer {
       // Manual message creation
       'add_inbound_message', 'add_outbound_call',
       // Call recordings & transcriptions
-      'get_message_recording', 'get_message_transcription', 'download_transcription',
+      'get_message_recording', 'get_message_transcription', 'download_transcription', 'transcribe_voicemail',
       // Scheduling management
       'cancel_scheduled_message', 'cancel_scheduled_email',
       // Live chat features

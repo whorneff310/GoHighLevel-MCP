@@ -5,6 +5,8 @@
 
 import { Tool } from '@modelcontextprotocol/sdk/types.js';
 import { GHLApiClient } from '../clients/ghl-api-client.js';
+import axios from 'axios';
+import FormData from 'form-data';
 import {
   MCPSendSMSParams,
   MCPSendEmailParams,
@@ -22,6 +24,7 @@ import {
   MCPGetMessageRecordingParams,
   MCPGetMessageTranscriptionParams,
   MCPDownloadTranscriptionParams,
+  MCPTranscribeVoicemailParams,
   MCPCancelScheduledMessageParams,
   MCPCancelScheduledEmailParams,
   MCPLiveChatTypingParams,
@@ -518,7 +521,25 @@ export class ConversationTools {
           required: ['messageId']
         }
       },
-      
+      {
+        name: 'transcribe_voicemail',
+        description: 'Transcribe a voicemail message. Tries GHL native transcription first, falls back to OpenAI Whisper if available. Returns transcription text with source indicator.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            messageId: {
+              type: 'string',
+              description: 'The unique ID of the voicemail/call message to transcribe'
+            },
+            locationId: {
+              type: 'string',
+              description: 'Optional location ID override (defaults to configured location)'
+            }
+          },
+          required: ['messageId']
+        }
+      },
+
       // SCHEDULING MANAGEMENT TOOLS
       {
         name: 'cancel_scheduled_message',
@@ -630,7 +651,10 @@ export class ConversationTools {
       
       case 'download_transcription':
         return this.downloadTranscription(args as MCPDownloadTranscriptionParams);
-      
+
+      case 'transcribe_voicemail':
+        return this.transcribeVoicemail(args as MCPTranscribeVoicemailParams);
+
       case 'cancel_scheduled_message':
         return this.cancelScheduledMessage(args as MCPCancelScheduledMessageParams);
       
@@ -1036,6 +1060,85 @@ export class ConversationTools {
       };
     } catch (error) {
       throw new Error(`Failed to download transcription: ${error}`);
+    }
+  }
+
+  private async transcribeVoicemail(params: MCPTranscribeVoicemailParams): Promise<{ success: boolean; transcription: string; source: string; message: string }> {
+    // Step 1: Try GHL native transcription
+    try {
+      const response = await this.ghlClient.getMessageTranscription(params.messageId, params.locationId);
+      const transcriptionData = response.data as GHLMessageTranscriptionResponse;
+
+      if (transcriptionData.transcriptions && transcriptionData.transcriptions.length > 0) {
+        const text = transcriptionData.transcriptions
+          .sort((a, b) => a.startTime - b.startTime)
+          .map(t => t.transcript)
+          .join(' ');
+
+        if (text.trim()) {
+          return {
+            success: true,
+            transcription: text.trim(),
+            source: 'ghl_native',
+            message: `Transcribed voicemail via GHL native (${transcriptionData.transcriptions.length} segments)`
+          };
+        }
+      }
+    } catch {
+      // GHL native failed -- fall through to Whisper
+    }
+
+    // Step 2: Fall back to OpenAI Whisper
+    const openaiKey = process.env.OPENAI_API_KEY;
+    if (!openaiKey) {
+      throw new Error('GHL native transcription returned empty and OPENAI_API_KEY is not set. Cannot fall back to Whisper.');
+    }
+
+    try {
+      // Download the recording audio
+      const recordingResponse = await this.ghlClient.getMessageRecording(params.messageId, params.locationId);
+      const recording = recordingResponse.data as GHLMessageRecordingResponse;
+
+      const audioBuffer = Buffer.isBuffer(recording.audioData)
+        ? recording.audioData
+        : Buffer.from(recording.audioData as ArrayBuffer);
+
+      // Determine file extension from content type
+      const ext = recording.contentType.includes('wav') ? 'wav'
+        : recording.contentType.includes('mp3') ? 'mp3'
+        : recording.contentType.includes('ogg') ? 'ogg'
+        : 'wav';
+
+      // Build multipart form for Whisper API
+      const form = new FormData();
+      form.append('file', audioBuffer, { filename: `voicemail.${ext}`, contentType: recording.contentType });
+      form.append('model', 'whisper-1');
+      form.append('response_format', 'text');
+
+      const whisperResponse = await axios.post(
+        'https://api.openai.com/v1/audio/transcriptions',
+        form,
+        {
+          headers: {
+            'Authorization': `Bearer ${openaiKey}`,
+            ...form.getHeaders()
+          },
+          timeout: 30000
+        }
+      );
+
+      const text = typeof whisperResponse.data === 'string'
+        ? whisperResponse.data.trim()
+        : String(whisperResponse.data).trim();
+
+      return {
+        success: true,
+        transcription: text,
+        source: 'openai_whisper',
+        message: `Transcribed voicemail via OpenAI Whisper (${audioBuffer.length} bytes audio)`
+      };
+    } catch (error) {
+      throw new Error(`Failed to transcribe voicemail: ${error}`);
     }
   }
 
