@@ -213,7 +213,7 @@ export class CalendarTools {
       },
       {
         name: 'get_calendar_events',
-        description: 'Get appointments/events from calendars within a date range',
+        description: 'Get appointments/events from calendars within a date range. If no calendarId, userId, or groupId is provided, automatically queries all calendars in the location.',
         inputSchema: {
           type: 'object',
           properties: {
@@ -227,7 +227,7 @@ export class CalendarTools {
             },
             calendarId: {
               type: 'string',
-              description: 'Filter events by specific calendar ID'
+              description: 'Filter events by specific calendar ID (optional -- omit to query all calendars)'
             },
             userId: {
               type: 'string',
@@ -1112,6 +1112,44 @@ export class CalendarTools {
       const startTime = this.convertToMilliseconds(params.startTime);
       const endTime = this.convertToMilliseconds(params.endTime);
 
+      // GHL API requires at least one of: calendarId, userId, or groupId.
+      // If none provided, auto-fetch all calendars and query each one.
+      if (!params.calendarId && !params.userId && !params.groupId) {
+        const calendarsResponse = await this.ghlClient.getCalendars({});
+        const calendarsData = calendarsResponse.data as GHLGetCalendarsResponse;
+        const calendars = Array.isArray(calendarsData?.calendars) ? calendarsData.calendars : [];
+
+        if (calendars.length === 0) {
+          return { success: true, events: [], message: 'No calendars found in location' };
+        }
+
+        const allEvents: GHLCalendarEvent[] = [];
+        for (const cal of calendars) {
+          try {
+            const response = await this.ghlClient.getCalendarEvents({
+              locationId: this.ghlClient.getConfig().locationId,
+              startTime,
+              endTime,
+              calendarId: cal.id
+            });
+            if (response.success && response.data) {
+              const data = response.data as GHLGetCalendarEventsResponse;
+              if (Array.isArray(data.events)) {
+                allEvents.push(...data.events);
+              }
+            }
+          } catch {
+            // Skip calendars that fail (e.g. draft calendars)
+          }
+        }
+
+        return {
+          success: true,
+          events: allEvents,
+          message: `Retrieved ${allEvents.length} calendar events across ${calendars.length} calendars`
+        };
+      }
+
       const eventParams = {
         locationId: this.ghlClient.getConfig().locationId,
         startTime,
@@ -1122,7 +1160,7 @@ export class CalendarTools {
       };
 
       const response = await this.ghlClient.getCalendarEvents(eventParams);
-      
+
       if (!response.success || !response.data) {
         const errorMsg = response.error?.message || 'Unknown API error';
         throw new Error(`API request failed: ${errorMsg}`);
@@ -1130,7 +1168,7 @@ export class CalendarTools {
 
       const data = response.data as GHLGetCalendarEventsResponse;
       const events = Array.isArray(data.events) ? data.events : [];
-      
+
       return {
         success: true,
         events,
