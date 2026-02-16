@@ -814,7 +814,8 @@ export class ConversationTools {
       const updateData = {
         locationId: this.ghlClient.getConfig().locationId,
         starred: params.starred,
-        unreadCount: params.unreadCount
+        // MCP protocol may pass numbers as strings -- coerce to number
+        unreadCount: params.unreadCount !== undefined ? Number(params.unreadCount) : undefined
       };
 
       const response = await this.ghlClient.updateConversation(params.conversationId, updateData);

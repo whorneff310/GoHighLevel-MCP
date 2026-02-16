@@ -436,13 +436,20 @@ export class GHLApiClient {
   }
 
   /**
-   * Handle API errors and convert to standardized format
+   * Handle API errors and convert to standardized format.
+   * Guards against double-wrapping: if the error was already handled
+   * by the response interceptor, return it as-is.
    */
   private handleApiError(error: AxiosError<GHLErrorResponse>): Error {
+    // Already handled by interceptor -- don't double-wrap
+    if (error instanceof Error && !(error as any).response && error.message?.startsWith('GHL API Error')) {
+      return error;
+    }
+
     const status = error.response?.status || 500;
     const message = error.response?.data?.message || error.message || 'Unknown error';
     const errorMessage = Array.isArray(message) ? message.join(', ') : message;
-    
+
     return new Error(`GHL API Error (${status}): ${errorMessage}`);
   }
 
